@@ -21,7 +21,7 @@ let colinaAdelante = [];
 // CONFIGURACIÓN DE MÁQUINA DE ESCRIBIR
 // ==========================================
 const textoCompleto = 
-`Pa que tu quieres las flores la plaza monumental si ninguna de esas flores significa el cerro completo de flores que tengo para ti.
+`Pa que tu quieres las flores la plaza monumental si ninguna de esas flores es nada comparado con el cerro completo de flores que siento por ti.
 
 Mi amor por ti es como cada flor de esta montaña, aumenta cada vez mas y mas, jamas deja de florecer y jamas se detiene.
 
