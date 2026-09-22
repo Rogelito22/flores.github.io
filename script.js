@@ -1,322 +1,367 @@
-// --- TEXTOS DE LA EXPERIENCIA ---
-const INTRO_TEXTO = "Yo sé que no te gustan las flores porque se marchitan y se ponen chimbas y vainas, así que por eso, te acomodé unos píxeles que puedes disfrutar por siempre.";
+// Configuración de la animación global
+let estado = "COLINAS"; // Estados: "COLINAS" -> "FLORES"
+let progresoColinas = 0; // Progreso del trazado de las colinas (0 a 1)
 
-const DECLARACION_BASE = "Mi amor por ti es tan intenso como los colores de esta flor, es tan duradero como este programa, es tan seguro como este código, cada píxel de esta flor representa un sol de mi amor brillando por ti con todas sus fuerzas, nunca me cansaría de decirte que te quiero";
+let girasoles = [];
 
-function formatearTexto(texto, maxPalabras = 6) {
-  const palabras = texto.split(' ');
-  const lineas = [];
-  for (let i = 0; i < palabras.length; i += maxPalabras) {
-    lineas.push(palabras.slice(i, i + maxPalabras).join(' '));
-  }
-  return lineas.join('\n');
-}
+// Temporizadores e intervalos independientes para flores
+let ultimoTiempoFlor = 0;
+const INTERVALO_NUEVA_FLOR = 500; // Nueva flor cada 0.5 segundos
 
-const TEXTO_INTRO_FORMATEADO = formatearTexto(INTRO_TEXTO, 6);
+let ultimoTiempoDesvanecer = 0;
+const INTERVALO_DESVANECER = 1000; // Desvanecimiento fluido de flores maduras
 
-// --- ESTADOS Y CONTROL DE FLUJO ---
-let escenaActual = 'INTRO'; // 'INTRO' o 'FLOR'
-let idxIntro = 0;
-let frameTimerIntro = 0;
-let botonSeguirVisible = false;
-let botonSalirVisible = false;
+const MAX_FLORES = 50; // Hasta 50 flores activas simultáneamente
 
-// Estado de la flor y declaración
-let estadoDeclaracion = {
-  textoCompleto: DECLARACION_BASE,
-  indiceLetra: 0,
-  tantosContados: 0,
-  botonSalirPuesto: false,
-  frameTimer: 0
-};
+// Puntos para definir las líneas de las colinas
+let colinaAtras = [];
+let colinaAdelante = [];
 
-// Progreso de dibujo de la flor
-let dibujoPaso = 0; // 0: Tallo, 1: Hoja, 2: Pétalos trazo, 3: Pétalos relleno, 4: Centro
-let progresoTallo = 0;
-let progresoHoja = 0;
-let petaloActual = 0;
-let progresoPetaloArc = 0; // Ámbito de 0 a 120 grados para completar ida y vuelta
+// ==========================================
+// CONFIGURACIÓN DE MÁQUINA DE ESCRIBIR
+// ==========================================
+const textoCompleto = 
+`Pa que tu quieres las flores la plaza monumental si ninguna de esas flores significa el cerro completo de flores que tengo para ti.
 
-// --- SETUP P5.JS ---
+Mi amor por ti es como cada flor de esta montaña, aumenta cada vez mas y mas, jamas deja de florecer y jamas se detiene.
+
+Mi amor por ti florecera siempre que este repositorio este activo y publicado en internet.
+
+Te amo demasiado Limelim <3
+
+*Bota espuma por la boca*`;
+
+let indiceTexto = 0;
+let ultimoTiempoMeca = 0;
+const VELOCIDAD_MECA = 75; // Milisegundos por letra
+
 function setup() {
-  const canvas = createCanvas(800, 800);
-  canvas.parent('canvas-container');
-  frameRate(30);
+  createCanvas(400, 700);
+  angleMode(DEGREES);
+
+  // Parámetros aleatorios para senos/cosenos de la colina trasera (suave)
+  let freqA1 = random(0.4, 0.8);
+  let ampA1 = random(40, 70);
+  let faseA1 = random(0, 360);
+  let baseAtras = random(height * 0.62, height * 0.67);
+
+  // Parámetros aleatorios para senos/cosenos de la colina frontal (suave)
+  let freqA2 = random(0.6, 1.0);
+  let ampA2 = random(50, 80);
+  let faseA2 = random(0, 360);
+  let baseAdelante = random(height * 0.76, height * 0.81);
+
+  // Generar curvas suaves mediante funciones sinusoidales aleatorias
+  for (let x = 0; x <= width; x += 5) {
+    // Colina trasera
+    let yAtras = baseAtras - sin(x * freqA1 + faseA1) * ampA1;
+    colinaAtras.push(createVector(x, yAtras));
+
+    // Colina frontal
+    let yAdelante = baseAdelante - sin(x * freqA2 + faseA2) * ampA2;
+    colinaAdelante.push(createVector(x, yAdelante));
+  }
+
+  ultimoTiempoMeca = millis();
 }
 
-// --- BUCLE PRINCIPAL DRAW ---
 function draw() {
-  background(0); // Fondo negro continuo
+  background(10, 15, 30); // Fondo oscuro
 
-  if (escenaActual === 'INTRO') {
-    dibujarEscenaIntro();
-  } else if (escenaActual === 'FLOR') {
-    dibujarEscenaFlor();
-  }
-}
+  // 1. Dibujar el Sol en la esquina superior izquierda
+  dibujarSol();
 
-// ==========================================
-// ESCENA 1: INTRODUCCIÓN CON MÁQUINA DE ESCRIBIR
-// ==========================================
-function dibujarEscenaIntro() {
-  fill(255);
-  noStroke();
-  textFont('Courier New');
-  textStyle(BOLD);
-  textSize(22);
-  textAlign(CENTER, TOP);
+  // 2. Efecto máquina de escribir respetando el margen del sol
+  actualizarYDibujarTexto();
 
-  // Progresión de máquina de escribir cada 2 frames (~60ms)
-  if (idxIntro <= TEXTO_INTRO_FORMATEADO.length) {
-    frameTimerIntro++;
-    if (frameTimerIntro % 2 === 0) {
-      idxIntro++;
+  // 3. Dibujar trazo animado de las colinas
+  dibujarColinas();
+
+  // 4. Gestionar y dibujar flores sobre las líneas
+  if (estado === "FLORES") {
+    gestionarCicloFlores();
+
+    for (let i = girasoles.length - 1; i >= 0; i--) {
+      let flor = girasoles[i];
+      flor.actualizarYDibujar();
+
+      if (flor.opacidad <= 0) {
+        girasoles.splice(i, 1);
+      }
     }
-  } else {
-    botonSeguirVisible = true;
-  }
-
-  const textoParcial = TEXTO_INTRO_FORMATEADO.substring(0, idxIntro);
-  const lineas = textoParcial.split('\n');
-  let startY = 220;
-  for (let i = 0; i < lineas.length; i++) {
-    text(lineas[i], width / 2, startY);
-    startY += 32;
-  }
-
-  if (botonSeguirVisible) {
-    fill(255, 255, 0);
-    textFont('Arial');
-    textSize(24);
-    textAlign(CENTER, CENTER);
-    text("SEGUIR", width / 2, 540);
   }
 }
 
-// ==========================================
-// ESCENA 2: LA FLOR Y MÁQUINA DE ESCRIBIR INFINITA
-// ==========================================
-function dibujarEscenaFlor() {
-  // 1. Dibujar la Flor animada (en la parte superior)
-  dibujarFlorPasoAPaso();
-
-  // 2. Dibujar y animar la declaración en máquina de escribir (parte inferior)
-  dibujarDeclaracionMaquinaEscribir();
-}
-
-function dibujarFlorPasoAPaso() {
+// Dibujado del Sol en la esquina superior izquierda
+function dibujarSol() {
   push();
-  // iy = 180 en Turtle equivale a (400, 220) en p5.js
-  const centroX = 400;
-  const centroY = 220;
+  let solX = 55;
+  let solY = 55;
+  let radioSol = 35; // Tamaño máximo de flor (70% de la flor base)
 
-  // --- 1. TALLO ---
-  if (dibujoPaso >= 0) {
-    stroke(0, 128, 0);
-    strokeWeight(12);
-    const altoMaxTallo = 300;
-    const altoActual = (dibujoPaso === 0) ? progresoTallo : altoMaxTallo;
-    
-    line(centroX, centroY + 50, centroX, centroY + 50 + altoActual);
+  // Resplandor exterior (Glow)
+  noStroke();
+  fill(255, 220, 100, 25);
+  ellipse(solX, solY, (radioSol * 2) + 35);
+  fill(255, 230, 120, 45);
+  ellipse(solX, solY, (radioSol * 2) + 18);
 
-    if (dibujoPaso === 0) {
-      progresoTallo += 10;
-      if (progresoTallo >= altoMaxTallo) {
-        dibujoPaso = 1;
-      }
+  // Núcleo del Sol
+  fill(255, 225, 90);
+  stroke(255, 190, 40);
+  strokeWeight(2);
+  ellipse(solX, solY, radioSol * 2);
+  pop();
+}
+
+// Lógica de texto en pantalla con área de exclusión del sol
+function actualizarYDibujarTexto() {
+  let tiempoActual = millis();
+
+  if (indiceTexto < textoCompleto.length) {
+    if (tiempoActual - ultimoTiempoMeca >= VELOCIDAD_MECA) {
+      indiceTexto++;
+      ultimoTiempoMeca = tiempoActual;
     }
   }
 
-  // --- 2. HOJA INCLINADA ---
-  if (dibujoPaso >= 1) {
-    push();
-    translate(centroX, centroY + 220);
-    rotate(radians(-20));
-    fill(0, 128, 0);
-    stroke(0, 128, 0);
-    strokeWeight(2);
+  let textoVisible = textoCompleto.substring(0, indiceTexto);
 
-    const escalaHoja = (dibujoPaso === 1) ? progresoHoja : 1.0;
-    
-    beginShape();
-    vertex(0, 0);
-    bezierVertex(-50 * escalaHoja, -40 * escalaHoja, -100 * escalaHoja, -20 * escalaHoja, -120 * escalaHoja, 30 * escalaHoja);
-    bezierVertex(-60 * escalaHoja, 50 * escalaHoja, -20 * escalaHoja, 30 * escalaHoja, 0, 0);
-    endShape(CLOSE);
-    pop();
+  if (indiceTexto < textoCompleto.length && floor(tiempoActual / 400) % 2 === 0) {
+    textoVisible += "▌";
+  }
 
-    if (dibujoPaso === 1) {
-      progresoHoja += 0.05;
-      if (progresoHoja >= 1.0) {
-        dibujoPaso = 2; // Pasar a contorno de pétalos
-        petaloActual = 0;
-        progresoPetaloArc = 0;
-      }
+  push();
+  fill(245, 245, 250);
+  noStroke();
+  textSize(14);
+  textFont('Georgia, serif');
+  textAlign(LEFT, TOP);
+
+  drawingContext.shadowOffsetX = 1;
+  drawingContext.shadowOffsetY = 2;
+  drawingContext.shadowBlur = 4;
+  drawingContext.shadowColor = 'rgba(0, 0, 0, 0.7)';
+
+  // El margen invisible de 1.5x desplaza el texto a x = 120 (55px + 52.5px de margen)
+  text(textoVisible, 120, 35, 255, 360);
+  pop();
+}
+
+// Dibujado paso a paso de las colinas suaves
+function dibujarColinas() {
+  noFill();
+  strokeWeight(3);
+
+  if (estado === "COLINAS") {
+    progresoColinas += 0.015;
+    if (progresoColinas >= 1) {
+      progresoColinas = 1;
+      estado = "FLORES";
+      let t = millis();
+      ultimoTiempoFlor = t;
+      ultimoTiempoDesvanecer = t;
     }
   }
 
-  // --- 3. PÉTALOS (TRAZO Y RELLENO) ---
-  if (dibujoPaso >= 2) {
-    // Dibujar pétalos previamente completados
-    for (let i = 0; i < 8; i++) {
-      if (dibujoPaso > 3 || (dibujoPaso === 3 && i < petaloActual)) {
-        // Rellenos
-        dibujarGeometriaPetalo(centroX, centroY, i * 45, 120, true);
-      } else if (dibujoPaso === 2 && i < petaloActual) {
-        // Trazados completados
-        dibujarGeometriaPetalo(centroX, centroY, i * 45, 120, false);
-      }
-    }
+  let limite = floor(colinaAtras.length * progresoColinas);
 
-    // Dibujar el pétalo que se está animando lentamente
-    if (dibujoPaso === 2) { // Trazado continuo pétalo a pétalo
-      dibujarGeometriaPetalo(centroX, centroY, petaloActual * 45, progresoPetaloArc, false);
-      progresoPetaloArc += 4; // Velocidad del trazo
-      if (progresoPetaloArc > 120) { // 120° en total (60° ida + 60° vuelta)
-        progresoPetaloArc = 0;
-        petaloActual++;
-        if (petaloActual >= 8) {
-          dibujoPaso = 3; // Pasar a rellenar los pétalos
-          petaloActual = 0;
+  // Colina trasera / superior (verde claro)
+  stroke(40, 180, 90);
+  beginShape();
+  for (let i = 0; i < limite; i++) {
+    vertex(colinaAtras[i].x, colinaAtras[i].y);
+  }
+  endShape();
+
+  // Colina frontal / inferior (verde intenso)
+  stroke(30, 210, 80);
+  beginShape();
+  for (let i = 0; i < limite; i++) {
+    vertex(colinaAdelante[i].x, colinaAdelante[i].y);
+  }
+  endShape();
+}
+
+// Controla la creación a 0.5s y desvanecimiento progresivo
+function gestionarCicloFlores() {
+  let tiempoActual = millis();
+
+  if (tiempoActual - ultimoTiempoFlor >= INTERVALO_NUEVA_FLOR) {
+    crearFlorAleatoriaEnArea();
+    ultimoTiempoFlor = tiempoActual;
+  }
+
+  if (girasoles.length >= MAX_FLORES) {
+    if (tiempoActual - ultimoTiempoDesvanecer >= INTERVALO_DESVANECER) {
+      for (let f of girasoles) {
+        if (f.fase === "FIN") {
+          f.iniciarDesvanecimiento();
+          ultimoTiempoDesvanecer = tiempoActual;
+          break;
         }
       }
-    } else if (dibujoPaso === 3) { // Relleno uno a uno
-      dibujarGeometriaPetalo(centroX, centroY, petaloActual * 45, 120, true);
-      petaloActual++;
-      if (petaloActual >= 8) {
-        dibujoPaso = 4; // Pasar al centro
-      }
     }
   }
-
-  // --- 4. CENTRO MARRÓN DE LA FLOR ---
-  if (dibujoPaso >= 4) {
-    fill(92, 51, 23); // Color #5C3317
-    noStroke();
-    circle(centroX, centroY, 130); // Diámetro 130 (radio 65)
-  }
-
-  pop();
 }
 
-// Función auxiliar matemática que simula fielmente forma_petalo() de Turtle
-function dibujarGeometriaPetalo(cx, cy, anguloDeg, progresoGrados, esRelleno) {
-  push();
-  translate(cx, cy);
-  rotate(radians(anguloDeg));
-
-  if (esRelleno) {
-    fill(255, 255, 0);
-    stroke(255, 255, 0);
-    strokeWeight(2);
-  } else {
-    noFill();
-    stroke(255, 255, 0);
-    strokeWeight(8);
-  }
-
-  const R = 180; // Radio del arco igual que en Python: circle(180, 60)
-  const maxArc1 = min(progresoGrados, 60);
-
-  beginShape();
-  // 1. Primer arco: de 0° a 60° (ida)
-  for (let a = 0; a <= maxArc1; a += 2) {
-    let rad = radians(a);
-    let x = R * (1 - cos(rad));
-    let y = -R * sin(rad);
-    vertex(x, y);
-  }
-
-  // 2. Segundo arco (de regreso al centro) si el progreso supera los 60°
-  if (progresoGrados > 60) {
-    const progresoArc2 = min(progresoGrados - 60, 60);
-    
-    // Punto cumbre del pétalo a los 60°
-    const rad60 = radians(60);
-    const xPeak = R * (1 - cos(rad60));
-    const yPeak = -R * sin(rad60);
-
-    for (let a = 0; a <= progresoArc2; a += 2) {
-      let rad = radians(a);
-      // Simula el giro de 120° y el arco de retorno a la base
-      let x = xPeak - R * (1 - cos(rad));
-      let y = yPeak + R * sin(rad);
-      vertex(x, y);
-    }
-  }
-
-  endShape(esRelleno ? CLOSE : OPEN);
-  pop();
-}
-
-// ==========================================
-// MÁQUINA DE ESCRIBIR DE LA DECLARACIÓN
-// ==========================================
-function dibujarDeclaracionMaquinaEscribir() {
-  estadoDeclaracion.frameTimer++;
+// Genera una flor con tamaño reducido (entre 20% y 70%)
+function crearFlorAleatoriaEnArea() {
+  let x = random(10, width - 10);
   
-  // Velocidad lenta: 1 letra cada 3 frames (~100ms)
-  if (estadoDeclaracion.frameTimer % 3 === 0) {
-    if (estadoDeclaracion.indiceLetra < estadoDeclaracion.textoCompleto.length) {
-      estadoDeclaracion.indiceLetra++;
-    } else {
-      estadoDeclaracion.textoCompleto += " tanto";
-      estadoDeclaracion.tantosContados++;
+  let indiceColina = floor(map(x, 0, width, 0, colinaAtras.length - 1));
+  let yLimiteSuperior = colinaAtras[indiceColina].y;
+  
+  let y = random(yLimiteSuperior, height - 40);
 
-      if (estadoDeclaracion.tantosContados === 20 && !estadoDeclaracion.botonSalirPuesto) {
-        estadoDeclaracion.botonSalirPuesto = true;
-        botonSalirVisible = true;
-      }
-    }
-  }
+  let factorProfundidad = map(y, height * 0.5, height, 0.4, 1.0);
+  let escalaBase = random(0.2, 0.7);
+  let escalaFinal = escalaBase * factorProfundidad;
 
-  const textoActual = estadoDeclaracion.textoCompleto.substring(0, estadoDeclaracion.indiceLetra);
-  const textoF = formatearTexto(textoActual, 7);
-  let lineas = textoF.split('\n');
-
-  if (lineas.length > 7) {
-    lineas = lineas.slice(lineas.length - 7);
-  }
-
-  fill(255);
-  noStroke();
-  textFont('Courier New');
-  textStyle(BOLD);
-  textSize(16);
-  textAlign(CENTER, TOP);
-
-  let startY = 620;
-  for (let i = 0; i < lineas.length; i++) {
-    text(lineas[i], width / 2, startY);
-    startY += 20;
-  }
-
-  if (botonSalirVisible) {
-    fill(255, 0, 0);
-    textFont('Arial');
-    textSize(18);
-    textAlign(CENTER, CENTER);
-    text("SALIR", width / 2, 770);
-  }
+  girasoles.push(new Girasol(x, y, escalaFinal));
 }
 
-// ==========================================
-// INTERACCIÓN DE CLICS (BOTONES)
-// ==========================================
-function mousePressed() {
-  const mouseXNorm = mouseX;
-  const mouseYNorm = mouseY;
+// CLASE GIRASOL
+class Girasol {
+  constructor(x, y, escala) {
+    this.x = x;
+    this.y = y;
+    this.escala = escala;
 
-  if (escenaActual === 'INTRO' && botonSeguirVisible) {
-    // Detección área botón SEGUIR
-    if (mouseXNorm >= 300 && mouseXNorm <= 500 && mouseYNorm >= 515 && mouseYNorm <= 565) {
-      escenaActual = 'FLOR';
-      botonSeguirVisible = false;
+    this.fase = "TALLO";
+    this.progresoTallo = 0;
+    this.numPetalos = 16;
+    this.petaloActual = 0;
+    this.progresoPetalo = 0;
+    this.progresoCentro = 0;
+
+    this.opacidad = 255;
+  }
+
+  iniciarDesvanecimiento() {
+    this.fase = "DESVANECER";
+  }
+
+  actualizarYDibujar() {
+    push();
+    translate(this.x, this.y);
+    scale(this.escala);
+
+    if (this.fase === "FIN" || this.fase === "DESVANECER") {
+      this.dibujarEstatico();
+    } else {
+      this.dibujarTallo();
+      if (this.fase !== "TALLO") this.dibujarPetalosCompletos();
+      if (this.fase === "PETALOS") this.animarPetaloActual();
+      if (this.fase === "CENTRO") this.dibujarCentro();
     }
-  } else if (escenaActual === 'FLOR' && botonSalirVisible) {
-    // Detección área botón SALIR
-    if (mouseXNorm >= 300 && mouseXNorm <= 500 && mouseYNorm >= 750 && mouseYNorm <= 790) {
-      location.reload(); // Reiniciar la experiencia
+
+    pop();
+
+    this.avanzarEstado();
+  }
+
+  dibujarEstatico() {
+    stroke(30, 160, 60, this.opacidad);
+    strokeWeight(6);
+    noFill();
+    line(0, 0, 0, 90);
+
+    fill(40, 180, 70, this.opacidad);
+    stroke(20, 120, 40, this.opacidad);
+    strokeWeight(2);
+    ellipse(-20, 50, 30, 15);
+    ellipse(20, 60, 30, 15);
+
+    fill(255, 204, 0, this.opacidad);
+    stroke(210, 140, 0, this.opacidad);
+    strokeWeight(2);
+    let anguloPaso = 360 / this.numPetalos;
+    for (let i = 0; i < this.numPetalos; i++) {
+      push();
+      rotate(i * anguloPaso);
+      ellipse(0, -45, 18, 50);
+      pop();
+    }
+
+    fill(90, 50, 20, this.opacidad);
+    stroke(50, 25, 5, this.opacidad);
+    strokeWeight(2);
+    ellipse(0, 0, 50, 50);
+  }
+
+  dibujarTallo() {
+    stroke(30, 160, 60, this.opacidad);
+    strokeWeight(6);
+    noFill();
+    let altoTallo = map(this.progresoTallo, 0, 1, 0, 90);
+    line(0, 90, 0, 90 - altoTallo);
+
+    if (this.progresoTallo > 0.6) {
+      fill(40, 180, 70, this.opacidad);
+      stroke(20, 120, 40, this.opacidad);
+      strokeWeight(2);
+      let escalaHoja = map(this.progresoTallo, 0.6, 1, 0, 1);
+      ellipse(-20, 50, 30 * escalaHoja, 15 * escalaHoja);
+      ellipse(20, 60, 30 * escalaHoja, 15 * escalaHoja);
+    }
+  }
+
+  animarPetaloActual() {
+    let anguloPaso = 360 / this.numPetalos;
+    let angulo = this.petaloActual * anguloPaso;
+
+    push();
+    rotate(angulo);
+    fill(255, 204, 0, this.opacidad);
+    stroke(210, 140, 0, this.opacidad);
+    strokeWeight(2);
+    let h = map(this.progresoPetalo, 0, 1, 0, 50);
+    ellipse(0, -h / 2 - 20, 18 * this.progresoPetalo, h);
+    pop();
+  }
+
+  dibujarPetalosCompletos() {
+    let anguloPaso = 360 / this.numPetalos;
+    fill(255, 204, 0, this.opacidad);
+    stroke(210, 140, 0, this.opacidad);
+    strokeWeight(2);
+
+    for (let i = 0; i < this.petaloActual; i++) {
+      push();
+      rotate(i * anguloPaso);
+      ellipse(0, -45, 18, 50);
+      pop();
+    }
+  }
+
+  dibujarCentro() {
+    fill(90, 50, 20, this.opacidad);
+    stroke(50, 25, 5, this.opacidad);
+    strokeWeight(2);
+    let diametro = map(this.progresoCentro, 0, 1, 0, 50);
+    ellipse(0, 0, diametro, diametro);
+  }
+
+  avanzarEstado() {
+    if (this.fase === "TALLO") {
+      this.progresoTallo += 0.04;
+      if (this.progresoTallo >= 1) this.fase = "PETALOS";
+    } else if (this.fase === "PETALOS") {
+      this.progresoPetalo += 0.2;
+      if (this.progresoPetalo >= 1) {
+        this.progresoPetalo = 0;
+        this.petaloActual++;
+        if (this.petaloActual >= this.numPetalos) this.fase = "CENTRO";
+      }
+    } else if (this.fase === "CENTRO") {
+      this.progresoCentro += 0.05;
+      if (this.progresoCentro >= 1) {
+        this.fase = "FIN";
+      }
+    } else if (this.fase === "DESVANECER") {
+      this.opacidad -= 2;
+      if (this.opacidad < 0) this.opacidad = 0;
     }
   }
 }
